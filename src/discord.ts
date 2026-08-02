@@ -39,7 +39,9 @@ export class DiscordWebhook {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: this.#username, embeds }),
       });
-      if (!res.ok) console.error(`Webhook error: HTTP ${res.status}`);
+      if (!res.ok) {
+        console.error(`Webhook error: HTTP ${res.status} ${await res.text()}`);
+      }
     } catch (err) {
       console.error(
         `Webhook送信に失敗: ${err instanceof Error ? err.message : err}`
