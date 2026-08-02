@@ -5,6 +5,9 @@ import type {
   ServerMetrics,
 } from "./types.ts";
 
+/** 応答が返らないままtickが積み重なるのを防ぐ打ち切り時間 */
+const TIMEOUT_MS = 10_000;
+
 /** Palworld公式REST APIの薄いクライアント */
 export class PalworldApi {
   readonly #baseUrl: string;
@@ -19,6 +22,7 @@ export class PalworldApi {
   async #get<T>(path: string): Promise<T> {
     const res = await fetch(`${this.#baseUrl}${path}`, {
       headers: { Authorization: this.#authHeader, Accept: "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Palworld API error: HTTP ${res.status} (${path})`);
     return (await res.json()) as T;
@@ -32,6 +36,7 @@ export class PalworldApi {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Palworld API error: HTTP ${res.status} (${path})`);
   }

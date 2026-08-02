@@ -41,15 +41,18 @@ function baseEmbed() {
   };
 }
 
-/** 現在のメモリ使用率フィールド (VPSホスト全体、%と実量) */
-function memoryField(): EmbedField {
+/** 現在のメモリ使用率 (VPSホスト全体)。%と表示用フィールドを一度の測定から作る */
+function readMemory(): { percent: number; field: EmbedField } {
   const total = totalmem();
   const used = total - freemem();
   const percent = Math.round((used / total) * 100);
   const GiB = 1024 ** 3;
   return {
-    name: "メモリ使用率",
-    value: `${percent}% (${(used / GiB).toFixed(1)}GB / ${(total / GiB).toFixed(1)}GB)`,
+    percent,
+    field: {
+      name: "メモリ使用率",
+      value: `${percent}% (${(used / GiB).toFixed(1)}GB / ${(total / GiB).toFixed(1)}GB)`,
+    },
   };
 }
 
@@ -58,16 +61,15 @@ let serverWasDown = false;
 let memoryWasHigh = false;
 
 /** VPSホストのメモリひっ迫を検知(しきい値超えの瞬間だけ1回通知) */
-async function checkMemory(): Promise<void> {
-  const percent = Math.round(((totalmem() - freemem()) / totalmem()) * 100);
-  if (percent >= MEM_THRESHOLD_PERCENT) {
+async function checkMemory(mem: ReturnType<typeof readMemory>): Promise<void> {
+  if (mem.percent >= MEM_THRESHOLD_PERCENT) {
     if (!memoryWasHigh) {
       memoryWasHigh = true;
       await discord.send({
         ...baseEmbed(),
         color: COLOR.memWarn,
         description: "⚠️ **メモリ使用率が逼迫しています**",
-        fields: [memoryField()],
+        fields: [mem.field],
       });
     }
   } else {
@@ -76,7 +78,8 @@ async function checkMemory(): Promise<void> {
 }
 
 async function tick(): Promise<void> {
-  await checkMemory();
+  const mem = readMemory();
+  await checkMemory(mem);
 
   let current: Map<string, KnownPlayer>;
   try {
@@ -106,20 +109,23 @@ async function tick(): Promise<void> {
       ...baseEmbed(),
       color: COLOR.info,
       description: "✅ **サーバーとの接続が回復しました**",
-      fields: [onlineField(current), memoryField()],
+      fields: [onlineField(current), mem.field],
     });
   }
 
-  if (prev !== null) {
-    const joined = [...current.keys()].filter((id) => !prev!.has(id)).length;
-    const left = [...prev.keys()].filter((id) => !current.has(id)).length;
+  const before = prev;
+  if (before !== null) {
+    // 人数が同じでも入れ替わりがあれば変化とみなす
+    const changed =
+      current.size !== before.size ||
+      [...current.keys()].some((id) => !before.has(id));
 
-    if (joined > 0 || left > 0) {
+    if (changed) {
       await discord.send({
         ...baseEmbed(),
         color: COLOR.info,
         title: "オンラインプレイヤー",
-        fields: [onlineField(current), memoryField()],
+        fields: [onlineField(current), mem.field],
       });
     }
   }
