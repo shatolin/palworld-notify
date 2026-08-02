@@ -47,7 +47,7 @@ Palworld専用サーバー(VPS)の接続プレイヤーとホスト負荷を監�
    - `メモリ使用率`: `os.totalmem()` / `os.freemem()` から算出。`{percent}% ({used}GB / {total}GB)`
    - `サーバーFPS`: `{serverfps} ({serverframetime}ms)`。metrics取得失敗時は `(取得失敗)`
    - `稼働時間` / `ゲーム内日数`: `/metrics` の `uptime` / `days` から。`days` はAPIバージョンによって返らないため、無ければフィールドごと省略
-7. 全Embed共通: footer=サーバー名(`/info` から取得、取れるまで毎tick再試行、暫定値 "Palworld")、timestamp付き、送信名 `Palworld通知`
+7. 全Embed共通: footer=サーバー名(`/info` から取得、取れるまで毎tick再試行、暫定値 "Palworld")、timestamp付き。**送信名・アイコンは指定しない**(`username` を送るとDiscord側のWebhook設定名を上書きしてしまうため、設定画面で付けた名前をそのまま使う)
 8. 起動直後の初回取得は通知しない(再起動のたびに全員分の参加通知が流れるのを防ぐ)
 
 ## セットアップ / 実行

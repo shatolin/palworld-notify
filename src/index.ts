@@ -18,7 +18,8 @@ if (!WEBHOOK_URL || !ADMIN_PASSWORD) {
 }
 
 const palworld = new PalworldApi(API_BASE, ADMIN_PASSWORD);
-const discord = new DiscordWebhook(WEBHOOK_URL, "Palworld通知");
+// 送信名は指定しない。Discord側のWebhook設定で付けた名前とアイコンをそのまま使う
+const discord = new DiscordWebhook(WEBHOOK_URL);
 
 let serverName = "Palworld"; // /info が取れるまでの暫定値
 let serverNameResolved = false;
