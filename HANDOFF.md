@@ -71,6 +71,7 @@ npm install && npm run typecheck
   - import指定子は拡張子つき `./xxx.ts`(`allowImportingTsExtensions`)
 - **実行時依存ゼロ**: fetchはNode組み込み。npm installは型チェック時のみ必要
 - **例外方針**: `DiscordWebhook.send` は例外を投げない(ログのみ)。Discord側の一時障害で監視ループを殺さないため。※JS版にはここにクラッシュバグがあり、TS化時のスモークテストで発見・修正済み
+  - HTTPエラー時はレスポンス本文もログに出す(`Webhook error: HTTP {status} {body}`)。ステータスコードだけでは原因(不正なURL、embed形式ミスなど)が分からないため
 - `PalworldApi` 側の例外は `tick` 内でcatchし、ダウン検知に利用している
 
 ## 参考資料
@@ -90,4 +91,15 @@ npm install && npm run typecheck
 
 - `tsc --noEmit`(strict + noUncheckedIndexedAccess)パス
 - Node 22.22で型剥がし実行のスモークテスト済(API未接続時のダウン通知経路、Webhook到達不能時の生存を確認)
-- 実際のPalworldサーバー・実Webhookに対する結合テストは**未実施** — VPS上での初回起動時に、テスト参加/退出で通知内容を確認すること
+- **実機結合テスト完了(2026-08-02、ConoHa VPS)**: 実際のPalworldサーバー・実Discord Webhookで参加検知・メモリ使用率フィールド・Webhookエラー経路を確認済み
+
+## デプロイ先固有の注意点(ConoHa「Palworld専用VPS」テンプレート)
+
+今回デプロイしたConoHa VPSでの構成・ハマりどころ。他環境やVPS再構築時の参考用。
+
+- Palworld本体は `/opt/palworld` にインストールされ、`palworld-server.service`(systemd)で管理される。設定ファイルは `/opt/palworld/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini`
+- ConoHa製の管理ツール `palworld-manager`(`/opt/palworld-manager`)が `palworld-manager.service` として常駐し、127.0.0.1:60001でWeb UIを提供(ブラウザ経由でstart/stop操作、バックアップ機能あり)。`palworld-server.service`とは別プロセスで、iniを定期的に上書きするような仕組みは無い
+- **既知の事故**: `sudo systemctl restart palworld-server.service` を直接叩いたところ、`PalWorldSettings.ini` が完全に空になった(停止シグナルとPalServer自身の設定書き戻し処理が競合したと推測、未確定)。その後は管理画面のstart/stop操作では再現していない。
+  → **Palworldサーバー本体の再起動は、CLIから直接`systemctl restart`せず、管理画面(palworld-manager Web UI)のstart/stopを使うこと**。CLIしか使えない場合は`stop`→ini内容確認→`start`と分けて、都度ファイルの中身を確認する
+- `RESTAPIPort` / `AdminPassword` はConoHaテンプレートの時点で既に設定済みのことがある(`RESTAPIEnabled`のみ`false`になっていた)。まず`cat`で確認してから変更するとよい
+- バックアップは`backup_palworld.timer`(毎日03:30 JST)で自動実行、`palworld-manager backup`コマンド経由。設定ファイルが壊れた際は管理画面から復元可能(ただしバックアップ取得時点の内容に戻るため、直前の設定変更は失われる)
