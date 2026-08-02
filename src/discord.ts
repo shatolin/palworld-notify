@@ -18,6 +18,7 @@ export const COLOR = {
   info: 0x5865f2, // ブループル (通常のオンライン状況・復旧)
   warn: 0xfee75c, // 黄 (サーバーダウン)
   memWarn: 0xe67e22, // オレンジ (メモリひっ迫)
+  perfWarn: 0xd35400, // 濃いオレンジ (サーバーFPS低下)
 } as const;
 
 /** Discord WebhookへのEmbed送信クライアント */

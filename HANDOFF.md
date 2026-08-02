@@ -2,7 +2,7 @@
 
 ## これは何か
 
-Palworld専用サーバー(VPS)の接続プレイヤーを監視し、参加/退出・サーバーダウン/復旧をDiscordにEmbed通知する常駐スクリプト。TypeScript製・実行時依存ゼロ・ビルドレス。
+Palworld専用サーバー(VPS)の接続プレイヤーとホスト負荷を監視し、オンライン状況の変化・サーバーダウン/復旧・メモリひっ迫・FPS低下をDiscordにEmbed通知する常駐スクリプト。TypeScript製・実行時依存ゼロ・ビルドレス。
 
 ## アーキテクチャ
 
@@ -35,14 +35,20 @@ Palworld専用サーバー(VPS)の接続プレイヤーを監視し、参加/退
 ## 現在の通知仕様
 
 1. **オンライン状況更新**: 前回ポーリングからプレイヤーの入退室があった時点で1つのEmbedを送信。誰が参加/退出したかは文言にしない(タイトル「オンラインプレイヤー」のみ)。
-   フィールド `オンライン (N人)` に現在の全接続者を `• 名前 (Lv.xx)` で列挙(0人なら `(なし)`、1024文字超は `…` で切り詰め)、末尾に `メモリ使用率` フィールドを付与。
+   フィールドは `オンライン (N人)`(フル幅)+ 下記の状態フィールド群。
    カラーバー: `0x5865f2`(ブループル、固定)
 2. **サーバーダウン**: API接続失敗に転じた瞬間に1回だけ黄色 `0xfee75c` で通知(連投しない)
-3. **復旧**: 接続回復時に1回、オンライン一覧+メモリ使用率つきで通知(色はオンライン状況更新と同じ `0x5865f2`)
+3. **復旧**: 接続回復時に1回、状態フィールドつきで通知(色はオンライン状況更新と同じ `0x5865f2`)
 4. **メモリひっ迫**: VPSホスト全体のメモリ使用率が `MEM_THRESHOLD_PERCENT`(既定85%)を超えた瞬間に1回だけオレンジ `0xe67e22` で通知。下回っても復旧通知は送らない(ユーザー選択)。Palworld API疎通とは独立に毎tick先頭でチェックするため、サーバーダウン中でも発報しうる
-5. **メモリ使用率フィールド**: `os.totalmem()` / `os.freemem()`(Node組み込み、追加依存なし)で算出したVPSホスト全体の使用率。`{percent}% ({used}GB / {total}GB)` 形式。オンライン状況更新・復旧Embedの一番下に付与
-6. 全Embed共通: footer=サーバー名(起動時に `/info` から取得、失敗時 "Palworld")、timestamp付き、送信名 `Palworld通知`
-7. 起動直後の初回取得は通知しない(再起動のたびに全員分の参加通知が流れるのを防ぐ)
+5. **サーバーFPS低下**: `serverfps` が `FPS_THRESHOLD`(既定20、正常値は30)を下回った瞬間に1回だけ濃いオレンジ `0xd35400` で通知。復旧通知はなし。`/metrics` が取れなかった周期は判定をスキップして前回状態を持ち越す(取得失敗を「回復」と誤認して連投するのを防ぐ)
+6. **状態フィールド群**(オンライン状況更新・復旧・FPS低下の各Embedで共通、すべて `inline: true` で横並び):
+   - `オンライン (N人)`: 現在の全接続者を `• 名前 (Lv.xx)` で列挙(0人なら `(なし)`、1024文字超は `…` で切り詰め)。ここだけフル幅
+   - `CPU負荷`: `os.loadavg()` の5分平均をコア数で正規化。`{percent}% (load {load5} / {cores}コア)`
+   - `メモリ使用率`: `os.totalmem()` / `os.freemem()` から算出。`{percent}% ({used}GB / {total}GB)`
+   - `サーバーFPS`: `{serverfps} ({serverframetime}ms)`。metrics取得失敗時は `(取得失敗)`
+   - `稼働時間` / `ゲーム内日数`: `/metrics` の `uptime` / `days` から。`days` はAPIバージョンによって返らないため、無ければフィールドごと省略
+7. 全Embed共通: footer=サーバー名(`/info` から取得、取れるまで毎tick再試行、暫定値 "Palworld")、timestamp付き、送信名 `Palworld通知`
+8. 起動直後の初回取得は通知しない(再起動のたびに全員分の参加通知が流れるのを防ぐ)
 
 ## セットアップ / 実行
 
@@ -59,7 +65,7 @@ npm start   # = node --experimental-strip-types src/index.ts
 npm install && npm run typecheck
 ```
 
-環境変数(任意): `PALWORLD_API`(既定 `http://127.0.0.1:8212/v1/api`)、`POLL_INTERVAL_SEC`(既定 60)、`MEM_THRESHOLD_PERCENT`(既定 85、VPSホストのメモリ使用率がこれを超えると警告)
+環境変数(任意): `PALWORLD_API`(既定 `http://127.0.0.1:8212/v1/api`)、`POLL_INTERVAL_SEC`(既定 60)、`MEM_THRESHOLD_PERCENT`(既定 85、VPSホストのメモリ使用率がこれを超えると警告)、`FPS_THRESHOLD`(既定 20、サーバーFPSがこれを下回ると警告)
 
 常駐化はsystemd推奨(`Restart=always`、READMEにユニット例あり)。pm2でも可。
 
@@ -73,16 +79,19 @@ npm install && npm run typecheck
 - **例外方針**: `DiscordWebhook.send` は例外を投げない(ログのみ)。Discord側の一時障害で監視ループを殺さないため。※JS版にはここにクラッシュバグがあり、TS化時のスモークテストで発見・修正済み
   - HTTPエラー時はレスポンス本文もログに出す(`Webhook error: HTTP {status} {body}`)。ステータスコードだけでは原因(不正なURL、embed形式ミスなど)が分からないため
 - `PalworldApi` 側の例外は `tick` 内でcatchし、ダウン検知に利用している
+- **ダウン判定の根拠は `/players` のみ**: `/players` と `/metrics` を `Promise.allSettled` で並列取得しているが、`/metrics` だけ失敗してもダウンとは扱わない(FPS欄が `(取得失敗)` になるだけ)
+- **REST APIには10秒のタイムアウト**(`AbortSignal.timeout`)。応答が返らないままtickが積み重なるのを防ぐ。ポーリング間隔を10秒未満にする場合はこの値も見直すこと
+- **サーバー名は取得できるまで再試行**: systemdの `After=palworld-server.service` は起動順序を決めるだけで準備完了を待たないため、VPS再起動直後は `/info` が接続拒否になり暫定値 "Palworld" のまま固定されてしまう。`tick` 内で `/players` 成功直後に未取得なら再取得する
 
 ## 参考資料
 
 - 公式REST APIリファレンス: https://docs.palworldgame.com/category/rest-api/ (日本語: /ja/ 配下)
 - `/players` のスキーマ: name, accountName, playerId, userId, ip, ping, location_x/y, level, building_count
-- `/metrics` で currentplayernum, serverfps, uptime など取得可(`getMetrics` 実装済み・未使用)
+- `/metrics` のスキーマ: serverfps, currentplayernum, serverframetime, maxplayernum, uptime, days(任意)。CPU使用率は含まれないため、ホスト側の負荷は `os.loadavg()` で代替している
 
 ## 今後の拡張候補(土台は準備済み)
 
-- 定期レポート(毎朝の人数サマリなど) → `getMetrics` + cron的なタイマー追加
+- 定期レポート(毎朝の人数サマリなど) → `/metrics` は毎tick取得済みなので、タイマーを足すだけ
 - Discord→ゲーム内アナウンス → `announce()` 実装済み。受け側を作るならWebhookでは不可、discord.jsでBot化が必要
 - Botステータス欄への人数常時表示 → 同上、Bot化が必要
 - Embedのthumbnail/authorアイコン → `Embed` 型に定義済み、値を渡すだけ

@@ -1,6 +1,6 @@
 # palworld-notify
 
-PalworldサーバーのREST APIを監視し、オンラインプレイヤーの変化・サーバーダウン・VPSホストのメモリひっ迫をDiscord Webhookに通知する常駐スクリプト。依存パッケージなし(実行時)。
+PalworldサーバーのREST APIを監視し、オンラインプレイヤーの変化・サーバーダウン・メモリひっ迫・サーバーFPS低下をDiscord Webhookに通知する常駐スクリプト。依存パッケージなし(実行時)。
 
 ## 必要環境
 
@@ -16,7 +16,7 @@ export PALWORLD_ADMIN_PASSWORD="AdminPasswordの値"
 npm start          # = node --experimental-strip-types src/index.ts
 ```
 
-環境変数(任意): `PALWORLD_API` (既定 http://127.0.0.1:8212/v1/api)、`POLL_INTERVAL_SEC` (既定 60)、`MEM_THRESHOLD_PERCENT` (既定 85、超えるとメモリひっ迫を通知)
+環境変数(任意): `PALWORLD_API` (既定 http://127.0.0.1:8212/v1/api)、`POLL_INTERVAL_SEC` (既定 60)、`MEM_THRESHOLD_PERCENT` (既定 85、超えるとメモリひっ迫を通知)、`FPS_THRESHOLD` (既定 20、下回るとサーバー高負荷を通知)
 
 ## 型チェック
 
