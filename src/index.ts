@@ -28,14 +28,56 @@ interface KnownPlayer {
   level: number | undefined;
 }
 
-/** 現在オンラインのプレイヤー一覧フィールド (field valueは最大1024文字) */
+/** Embedのfield valueの上限 (Discord仕様) */
+const FIELD_VALUE_LIMIT = 1024;
+/** プレイヤー名カラムの桁数 (等幅表示)。これより長い名前は末尾を省略する */
+const NAME_COLUMN = 16;
+/** 等幅フォントで2桁分を占める文字 (CJK・かな・ハングル・全角記号) */
+const WIDE_CHAR =
+  /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹯＀-｠￠-￦]/;
+
+/** 等幅表示での文字幅 */
+function charWidth(ch: string): number {
+  return WIDE_CHAR.test(ch) ? 2 : 1;
+}
+
+/** プレイヤー名を等幅で NAME_COLUMN 桁に揃える (レベルを縦に並べるため) */
+function padName(name: string): string {
+  const safe = name.replace(/`/g, "'"); // バッククォートはインラインコードを壊す
+  let width = 0;
+  for (const ch of safe) width += charWidth(ch);
+  if (width <= NAME_COLUMN) return safe + " ".repeat(NAME_COLUMN - width);
+
+  // 収まらないので NAME_COLUMN-1 桁まで詰めて省略記号を足す
+  let out = "";
+  width = 0;
+  for (const ch of safe) {
+    const w = charWidth(ch);
+    if (width + w > NAME_COLUMN - 1) break;
+    out += ch;
+    width += w;
+  }
+  return out + "…" + " ".repeat(NAME_COLUMN - width - 1);
+}
+
+/**
+ * 現在オンラインのプレイヤー一覧フィールド。
+ * 引用(`> `)+ インラインコードで、左に縦線の入った等幅の一覧枠として見せる
+ */
 function onlineField(current: Map<string, KnownPlayer>): EmbedField {
-  let value =
-    [...current.values()]
-      .map((p) => `• ${p.name} (Lv.${p.level ?? "?"})`)
-      .join("\n") || "(なし)";
-  if (value.length > 1024) value = value.slice(0, 1020) + "\n…";
-  return { name: `オンライン (${current.size}人)`, value };
+  const name = `オンライン (${current.size}人)`;
+  const players = [...current.values()];
+  if (players.length === 0) return { name, value: "> `(なし)`" };
+
+  const lines = players.map(
+    (p) => `> \`${padName(p.name)} Lv.${String(p.level ?? "?").padStart(2)}\``
+  );
+  // 1024文字を超える分は末尾を「他N人」に畳む (行の途中で切ると枠が壊れる)
+  while (lines.length > 1 && lines.join("\n").length > FIELD_VALUE_LIMIT) {
+    lines.pop();
+    lines[lines.length - 1] = `> \`…他${players.length - lines.length + 1}人\``;
+  }
+  return { name, value: lines.join("\n") };
 }
 
 function baseEmbed() {
