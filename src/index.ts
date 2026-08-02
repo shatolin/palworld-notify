@@ -142,13 +142,28 @@ function daysField(days: number): EmbedField {
   return { name: "ゲーム内日数", value: `${days}日目`, inline: true };
 }
 
-/** オンライン一覧 + ホスト負荷3種 + 稼働状況。通常通知・復旧通知で共通 */
+/**
+ * 空行として効く区切りフィールド。Discordはnameもvalueも空文字を拒むため、
+ * ゼロ幅スペースを入れて「中身が見えないフィールド」として1行分の余白を作る
+ */
+function spacerField(): EmbedField {
+  const ZWSP = "\u200b"; // U+200B ゼロ幅スペース
+  return { name: ZWSP, value: ZWSP, inline: false };
+}
+
+/** オンライン一覧 + 区切り + ホスト負荷3種 + 稼働状況。通常通知・復旧通知で共通 */
 function statusFields(
   current: Map<string, KnownPlayer>,
   memField: EmbedField,
   metrics: ServerMetrics | null
 ): EmbedField[] {
-  const fields = [onlineField(current), cpuField(), memField, fpsField(metrics)];
+  const fields = [
+    onlineField(current),
+    spacerField(),
+    cpuField(),
+    memField,
+    fpsField(metrics),
+  ];
   if (metrics) {
     fields.push(uptimeField(metrics));
     if (metrics.days !== undefined) fields.push(daysField(metrics.days));
