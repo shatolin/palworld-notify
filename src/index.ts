@@ -9,7 +9,8 @@ const ADMIN_PASSWORD = process.env.PALWORLD_ADMIN_PASSWORD;
 const API_BASE = process.env.PALWORLD_API ?? "http://127.0.0.1:8212/v1/api";
 const INTERVAL = (Number(process.env.POLL_INTERVAL_SEC) || 60) * 1000;
 const MEM_THRESHOLD_PERCENT = Number(process.env.MEM_THRESHOLD_PERCENT) || 85;
-const FPS_THRESHOLD = Number(process.env.FPS_THRESHOLD) || 20;
+// 正常値60fpsの2/3。30fps設定のサーバーに載せる場合は 20 に下げること
+const FPS_THRESHOLD = Number(process.env.FPS_THRESHOLD) || 40;
 
 if (!WEBHOOK_URL || !ADMIN_PASSWORD) {
   console.error("DISCORD_WEBHOOK_URL と PALWORLD_ADMIN_PASSWORD を設定してください");
@@ -71,7 +72,7 @@ function cpuField(): EmbedField {
   };
 }
 
-/** サーバーFPS (30が正常値)。metrics取得に失敗した周期では値を出さない */
+/** サーバーFPS。metrics取得に失敗した周期では値を出さない */
 function fpsField(metrics: ServerMetrics | null): EmbedField {
   return {
     name: "サーバーFPS",

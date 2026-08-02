@@ -40,7 +40,7 @@ Palworld専用サーバー(VPS)の接続プレイヤーとホスト負荷を監�
 2. **サーバーダウン**: API接続失敗に転じた瞬間に1回だけ黄色 `0xfee75c` で通知(連投しない)
 3. **復旧**: 接続回復時に1回、状態フィールドつきで通知(色はオンライン状況更新と同じ `0x5865f2`)
 4. **メモリひっ迫**: VPSホスト全体のメモリ使用率が `MEM_THRESHOLD_PERCENT`(既定85%)を超えた瞬間に1回だけオレンジ `0xe67e22` で通知。下回っても復旧通知は送らない(ユーザー選択)。Palworld API疎通とは独立に毎tick先頭でチェックするため、サーバーダウン中でも発報しうる
-5. **サーバーFPS低下**: `serverfps` が `FPS_THRESHOLD`(既定20、正常値は30)を下回った瞬間に1回だけ濃いオレンジ `0xd35400` で通知。復旧通知はなし。`/metrics` が取れなかった周期は判定をスキップして前回状態を持ち越す(取得失敗を「回復」と誤認して連投するのを防ぐ)
+5. **サーバーFPS低下**: `serverfps` が `FPS_THRESHOLD`(既定40)を下回った瞬間に1回だけ濃いオレンジ `0xd35400` で通知。既定値は本番サーバーの実測正常値60fpsの2/3として決めた値。**30fps設定のサーバーに載せる場合は20程度まで下げないと発報しない**復旧通知はなし。`/metrics` が取れなかった周期は判定をスキップして前回状態を持ち越す(取得失敗を「回復」と誤認して連投するのを防ぐ)
 6. **状態フィールド群**(オンライン状況更新・復旧・FPS低下の各Embedで共通、すべて `inline: true` で横並び):
    - `オンライン (N人)`: 現在の全接続者を `• 名前 (Lv.xx)` で列挙(0人なら `(なし)`、1024文字超は `…` で切り詰め)。ここだけフル幅
    - `CPU負荷`: `os.loadavg()` の5分平均をコア数で正規化。`{percent}% (load {load5} / {cores}コア)`
@@ -65,7 +65,7 @@ npm start   # = node --experimental-strip-types src/index.ts
 npm install && npm run typecheck
 ```
 
-環境変数(任意): `PALWORLD_API`(既定 `http://127.0.0.1:8212/v1/api`)、`POLL_INTERVAL_SEC`(既定 60)、`MEM_THRESHOLD_PERCENT`(既定 85、VPSホストのメモリ使用率がこれを超えると警告)、`FPS_THRESHOLD`(既定 20、サーバーFPSがこれを下回ると警告)
+環境変数(任意): `PALWORLD_API`(既定 `http://127.0.0.1:8212/v1/api`)、`POLL_INTERVAL_SEC`(既定 60)、`MEM_THRESHOLD_PERCENT`(既定 85、VPSホストのメモリ使用率がこれを超えると警告)、`FPS_THRESHOLD`(既定 40、サーバーFPSがこれを下回ると警告)
 
 常駐化はsystemd推奨(`Restart=always`、READMEにユニット例あり)。pm2でも可。
 
