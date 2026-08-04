@@ -1,12 +1,12 @@
 import { totalmem, freemem, loadavg, cpus } from "node:os";
-import { PalworldApi } from "./palworld.ts";
+import { DEFAULT_API_BASE, PalworldApi } from "./palworld.ts";
 import { DiscordWebhook, COLOR, type EmbedField } from "./discord.ts";
 import type { ServerMetrics } from "./types.ts";
 
 // ---- 設定 (環境変数) ----
 const WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ADMIN_PASSWORD = process.env.PALWORLD_ADMIN_PASSWORD;
-const API_BASE = process.env.PALWORLD_API ?? "http://127.0.0.1:8212/v1/api";
+const API_BASE = process.env.PALWORLD_API ?? DEFAULT_API_BASE;
 const INTERVAL = (Number(process.env.POLL_INTERVAL_SEC) || 60) * 1000;
 const MEM_THRESHOLD_PERCENT = Number(process.env.MEM_THRESHOLD_PERCENT) || 85;
 // 正常値60fpsの2/3。30fps設定のサーバーに載せる場合は 20 に下げること

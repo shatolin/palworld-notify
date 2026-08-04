@@ -8,6 +8,9 @@ import type {
 /** 応答が返らないままtickが積み重なるのを防ぐ打ち切り時間 */
 const TIMEOUT_MS = 10_000;
 
+/** REST APIの既定エンドポイント。常駐プロセスとCLIで共有する */
+export const DEFAULT_API_BASE = "http://127.0.0.1:8212/v1/api";
+
 /** Palworld公式REST APIの薄いクライアント */
 export class PalworldApi {
   readonly #baseUrl: string;

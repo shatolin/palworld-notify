@@ -18,6 +18,19 @@ npm start          # = node --experimental-strip-types src/index.ts
 
 環境変数(任意): `PALWORLD_API` (既定 http://127.0.0.1:8212/v1/api)、`POLL_INTERVAL_SEC` (既定 60)、`MEM_THRESHOLD_PERCENT` (既定 85、超えるとメモリひっ迫を通知)、`FPS_THRESHOLD` (既定 40、下回るとサーバー高負荷を通知)
 
+## ゲーム内アナウンス(手動)
+
+再起動予告・メンテ告知をゲーム内に流す単発コマンド。常駐プロセスとは別に実行する。
+
+```bash
+export PALWORLD_ADMIN_PASSWORD="AdminPasswordの値"
+npm run announce -- "20時にサーバーを再起動します"
+```
+
+`DISCORD_WEBHOOK_URL` は不要(`PALWORLD_ADMIN_PASSWORD` のみ必須、接続先は `PALWORLD_API` で上書き可)。成功で終了コード0、失敗で1を返すので再起動スクリプトから成否を判定できる。
+
+systemdの `Environment=` はそのユニット専用でシェルには渡らないため、CLI実行時は自分で `export` する(または `systemctl show palworld-notify -p Environment` から拾う)。
+
 ## 型チェック
 
 ```bash
@@ -47,6 +60,7 @@ WantedBy=multi-user.target
 ## 構成
 
 - `src/index.ts` — 監視ループ本体 (差分検知、Embed組み立て)
+- `src/announce.ts` — 手動アナウンス用CLI (`npm run announce`)
 - `src/palworld.ts` — REST APIクライアント (`getPlayers` / `getInfo` / `getMetrics` / `announce`)
 - `src/discord.ts` — Webhookクライアント、Embed型、カラー定義
 - `src/types.ts` — Palworld公式APIスキーマの型定義
