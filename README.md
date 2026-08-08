@@ -18,6 +18,19 @@ npm start          # = node --experimental-strip-types src/index.ts
 
 環境変数(任意): `PALWORLD_API` (既定 http://127.0.0.1:8212/v1/api)、`POLL_INTERVAL_SEC` (既定 60)、`MEM_THRESHOLD_PERCENT` (既定 85、超えるとメモリひっ迫を通知)、`FPS_THRESHOLD` (既定 40、下回るとサーバー高負荷を通知)
 
+### 警告通知の間引き
+
+FPS・メモリの警告は、しきい値付近を行き来しても連発しないよう3段構えで抑制している。
+
+| 環境変数 | 既定 | 役割 |
+| --- | --- | --- |
+| `ALERT_SUSTAIN_TICKS` | 3 | この回数だけ連続でしきい値を割って初めて通知(セーブ処理などの一瞬の落ち込みを無視) |
+| `ALERT_COOLDOWN_MIN` | 30 | 一度鳴らしたら、この分数は同じ警告を再送しない |
+| `FPS_RECOVER` | `FPS_THRESHOLD`+10 | ここまで戻って初めて「回復」とみなす(境界を跨ぐだけでは再通知しない) |
+| `MEM_RECOVER_PERCENT` | `MEM_THRESHOLD_PERCENT`-5 | 同上(メモリ側) |
+
+通知が多すぎるときは `ALERT_SUSTAIN_TICKS` か `ALERT_COOLDOWN_MIN` を上げる。
+
 ## ゲーム内アナウンス(手動)
 
 再起動予告・メンテ告知をゲーム内に流す単発コマンド。常駐プロセスとは別に実行する。

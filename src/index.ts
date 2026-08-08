@@ -11,6 +11,15 @@ const INTERVAL = (Number(process.env.POLL_INTERVAL_SEC) || 60) * 1000;
 const MEM_THRESHOLD_PERCENT = Number(process.env.MEM_THRESHOLD_PERCENT) || 85;
 // 正常値60fpsの2/3。30fps設定のサーバーに載せる場合は 20 に下げること
 const FPS_THRESHOLD = Number(process.env.FPS_THRESHOLD) || 40;
+/** 異常値が何周期続いたら発報するか。ワールドセーブ等の一瞬の落ち込みでは鳴らさない */
+const ALERT_SUSTAIN_TICKS = Number(process.env.ALERT_SUSTAIN_TICKS) || 3;
+/** 一度鳴らしたら、同じ警告をこの時間だけ再送しない */
+const ALERT_COOLDOWN_MS = (Number(process.env.ALERT_COOLDOWN_MIN) || 30) * 60_000;
+/** 回復とみなすFPS。発報しきい値より高くして、境界を跨ぐだけの再発報を防ぐ */
+const FPS_RECOVER = Number(process.env.FPS_RECOVER) || FPS_THRESHOLD + 10;
+/** 回復とみなすメモリ使用率。発報しきい値より低くする(同上) */
+const MEM_RECOVER_PERCENT =
+  Number(process.env.MEM_RECOVER_PERCENT) || MEM_THRESHOLD_PERCENT - 5;
 
 if (!WEBHOOK_URL || !ADMIN_PASSWORD) {
   console.error("DISCORD_WEBHOOK_URL と PALWORLD_ADMIN_PASSWORD を設定してください");
@@ -171,47 +180,87 @@ function statusFields(
   return fields;
 }
 
-let prev: Map<string, KnownPlayer> | null = null; // 初回は通知しない
-let serverWasDown = false;
-let memoryWasHigh = false;
-let fpsWasLow = false;
+/**
+ * 一時的な揺れでは鳴らない警告ゲート。しきい値ちょうどの付近を行き来する値
+ * (セーブ処理中のFPSなど) で通知が連発するのを防ぐ。
+ * - 異常値が sustain 周期続いて初めて発報する
+ * - 回復判定は発報しきい値より緩い値で行う (その間は「様子見」帯として持ち越す)
+ * - 回復と再発を繰り返しても、クールダウンの間は再発報しない
+ */
+class AlertGate {
+  readonly #sustain: number;
+  readonly #cooldownMs: number;
+  #streak = 0; // 異常値だった連続周期数 (回復するまでリセットしない)
+  #firing = false; // 発報済みで、まだ回復していない
+  #lastFiredAt = 0;
 
-/** VPSホストのメモリひっ迫を検知(しきい値超えの瞬間だけ1回通知) */
-async function checkMemory(mem: ReturnType<typeof readMemory>): Promise<void> {
-  if (mem.percent >= MEM_THRESHOLD_PERCENT) {
-    if (!memoryWasHigh) {
-      memoryWasHigh = true;
-      await discord.send({
-        ...baseEmbed(),
-        color: COLOR.memWarn,
-        description: "⚠️ **メモリ使用率が逼迫しています**",
-        fields: [mem.field],
-      });
+  constructor(sustain: number, cooldownMs: number) {
+    this.#sustain = sustain;
+    this.#cooldownMs = cooldownMs;
+  }
+
+  /**
+   * 今周期の観測を反映し、通知すべき瞬間なら true を返す。
+   * @param bad しきい値を割っているか
+   * @param good 回復しきい値まで戻ったか (bad でも good でもない値は様子見)
+   */
+  check(bad: boolean, good: boolean): boolean {
+    if (good) {
+      this.#streak = 0;
+      this.#firing = false;
+      return false;
     }
-  } else {
-    memoryWasHigh = false;
+    if (!bad) return false; // 様子見帯: 連続回数も発報状態もそのまま持ち越す
+
+    this.#streak++;
+    if (this.#firing || this.#streak < this.#sustain) return false;
+
+    // 発報条件は満たした。抑制した場合も #firing は立てて毎周期の判定を止める
+    this.#firing = true;
+    const now = Date.now();
+    if (now - this.#lastFiredAt < this.#cooldownMs) return false;
+    this.#lastFiredAt = now;
+    return true;
   }
 }
 
-/** サーバーFPS低下を検知(しきい値割れの瞬間だけ1回通知) */
+let prev: Map<string, KnownPlayer> | null = null; // 初回は通知しない
+let serverWasDown = false;
+const memoryGate = new AlertGate(ALERT_SUSTAIN_TICKS, ALERT_COOLDOWN_MS);
+const fpsGate = new AlertGate(ALERT_SUSTAIN_TICKS, ALERT_COOLDOWN_MS);
+
+/** VPSホストのメモリひっ迫を検知 */
+async function checkMemory(mem: ReturnType<typeof readMemory>): Promise<void> {
+  const fire = memoryGate.check(
+    mem.percent >= MEM_THRESHOLD_PERCENT,
+    mem.percent < MEM_RECOVER_PERCENT
+  );
+  if (!fire) return;
+  await discord.send({
+    ...baseEmbed(),
+    color: COLOR.memWarn,
+    description: "⚠️ **メモリ使用率が逼迫しています**",
+    fields: [mem.field],
+  });
+}
+
+/** サーバーFPS低下を検知 */
 async function checkFps(
   metrics: ServerMetrics | null,
   fields: EmbedField[]
 ): Promise<void> {
   if (metrics === null) return; // 取得失敗の周期は判定を持ち越す
-  if (metrics.serverfps < FPS_THRESHOLD) {
-    if (!fpsWasLow) {
-      fpsWasLow = true;
-      await discord.send({
-        ...baseEmbed(),
-        color: COLOR.perfWarn,
-        description: "⚠️ **サーバーの処理が重くなっています**",
-        fields,
-      });
-    }
-  } else {
-    fpsWasLow = false;
-  }
+  const fire = fpsGate.check(
+    metrics.serverfps < FPS_THRESHOLD,
+    metrics.serverfps >= FPS_RECOVER
+  );
+  if (!fire) return;
+  await discord.send({
+    ...baseEmbed(),
+    color: COLOR.perfWarn,
+    description: `⚠️ **サーバーの処理が重くなっています** (${FPS_THRESHOLD}fps未満が${ALERT_SUSTAIN_TICKS}周期継続)`,
+    fields,
+  });
 }
 
 async function tick(): Promise<void> {
